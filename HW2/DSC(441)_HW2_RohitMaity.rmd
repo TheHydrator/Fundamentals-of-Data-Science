@@ -1,0 +1,731 @@
+
+---
+title: "HW2 Solutions"
+name: Rohit Goutam Maity
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Problem 1
+
+## 1a. Visualizing the distributions of the variables
+
+```{r visualize}
+library(ggplot2)
+bank_data <- read.csv("BankData.csv")
+summary(bank_data)
+
+ggplot(bank_data, aes(x = ages)) +
+  geom_histogram(bins = 20, fill = "skyblue") +
+  labs(title = "Ages Distribution", x = "Ages", y = "Count")
+
+ggplot(bank_data, aes(x = approval)) +
+  geom_bar(fill = "salmon") +
+  labs(title = "Approval Distribution", x = "Approval", y = "Count")
+```
+### Visualizing the Distributions of the Variables
+
+For the given dataset, I visualized the distribution of both numerical and categorical variables as follows:
+
+1. **Numerical Variable (ages):**
+   - I used a **histogram** with 20 bins to visualize the distribution of ages. This choice allows us to see how the ages are spread across different ranges in the dataset. The histogram provides insights into the central tendency and dispersion of the age values.
+
+2. **Categorical Variable (approval):**
+   - For the approval variable, I used a **bar graph** to display the count of each category. This is an effective way to visualize categorical data, as it shows the proportion of approved and not approved cases in the dataset.
+
+These visualizations help to understand the dataset's structure, identify any skewness or outliers in the numerical data, and assess the balance of categories in the categorical variables.
+
+
+## 1b. Normalization of numerical variables
+
+```{r normalization}
+# Applying Z-score normalization to 'cont1'
+bank_data$cont1_zscore <- scale(bank_data$cont1)
+
+# Applying Min-Max normalization to 'cont2'
+bank_data$cont2_minmax <- (bank_data$cont2 - min(bank_data$cont2)) / (max(bank_data$cont2) - min(bank_data$cont2))
+
+# Applying Decimal scaling normalization to 'cont3'
+bank_data$cont3_scaled <- bank_data$cont3 / 10^ceiling(log10(max(abs(bank_data$cont3))))
+```
+
+### Summary of Normalization Choices:
+
+1. **Z-score Normalization for cont1:**
+   - **Reason:** cont1 might represent a variable like credit scores, which are usually normally distributed.
+   - **Effect:** Centers data around 0, highlighting deviations from the mean. Suitable for data with a bell-shaped distribution.
+
+2. **Min-Max Normalization for cont2:**
+   - **Reason:** cont2 could be income, which has a defined range.
+   - **Effect:** Scales values between 0 and 1, preserving relative differences. Useful for bounded variables.
+
+3. **Decimal Scaling for cont3:**
+   - **Reason:** cont3 might represent large loan amounts with varying magnitudes.
+   - **Effect:** Compresses large values to a manageable range by moving the decimal point, keeping the relative order.
+   
+   
+## 1c. Visualizing the normalized distributions
+
+```{r visualize-normalized}
+ggplot(bank_data, aes(x = cont1_zscore)) +
+  geom_histogram(bins = 20, fill = "lightblue") +
+  labs(title = "Z-score Normalized cont1 Distribution", x = "Z-score cont1", y = "Count")
+
+ggplot(bank_data, aes(x = cont2_minmax)) +
+  geom_histogram(bins = 20, fill = "lightgreen") +
+  labs(title = "Min-Max Normalized cont2 Distribution", x = "Min-Max cont2", y = "Count")
+```
+### Visualizing the Normalized Distributions
+
+After normalizing the numerical variables, I visualized their new distributions:
+
+1. **Z-score Normalized cont1:**
+   - The histogram of the z-score normalized cont1 shows how the values have been transformed to have a mean of 0 and a standard deviation of 1. This helps in identifying how data points are distributed relative to the mean. Most values are centered around 0, with outliers appearing as bars further away from the center.
+
+2. **Min-Max Normalized cont2:**
+   - The histogram of the min-max normalized cont2 displays values scaled between 0 and 1. This scaling maintains the original distribution's shape but compresses the range, making the data more suitable for algorithms sensitive to variable ranges. The distribution is now confined within the specified bounds.
+
+These visualizations confirm that normalization changes the data's range and distribution, making it easier to compare variables on the same scale.
+
+
+## 1d. Binning a numerical variable
+
+```{r binning}
+bank_data$cont4_bins <- cut(bank_data$cont4, breaks = 3, labels = c("low", "medium", "high"))
+```
+
+### Creating Binned Variable
+
+For this problem, I chose the numerical variable cont4. I created a new variable, cont4_bins, which categorizes cont4 into three bins: "low," "medium," and "high." 
+
+I used the cut function to divide the variable into three equal-width intervals, which makes it straightforward to interpret. The labels "low," "medium," and "high" provide a clear categorization of the data, helping to simplify analysis and visualization.
+
+**Why This Choice:** I chose to use three bins because it allows us to get a basic understanding of the variable's distribution without making it overly complicated. Using equal-width intervals ensures that the range of values in each bin is consistent, making it easier to compare the different segments. This method is especially useful when the variable's distribution is somewhat uniform, as it evenly spreads out the data into categories.
+
+
+## 1e. Creating a smoothed version of the binned variable
+
+```{r smoothing}
+# Removing NA values from "cont4" before binning and smoothing
+bank_data_clean <- bank_data[!is.na(bank_data$cont4), ]
+
+bank_data_clean$cont4_bins <- cut(bank_data_clean$cont4, breaks = 3, labels = c("low", "medium", "high"))
+
+cont4_mean_values <- aggregate(bank_data_clean$cont4, by = list(bank_data_clean$cont4_bins), FUN = mean)
+names(cont4_mean_values) <- c("bin", "mean_cont4")
+
+bank_data_clean <- merge(bank_data_clean, cont4_mean_values, by.x = "cont4_bins", by.y = "bin", all.x = TRUE)
+
+summary(bank_data_clean)
+
+```
+### Creating a Smoothed Version of v_bins
+
+To create a smoothed version of the binned variable (cont4_bins), I used the mean value within each bin. Here's the step-by-step explanation:
+
+1. **Remove NA Values:** First, I filtered out any rows with missing values in cont4 to avoid errors during aggregation.
+2. **Binning:** I then divided cont4 into three equal-width bins labeled as "low," "medium," and "high." This categorization helps to segment the data into meaningful ranges.
+3. **Smoothing:** I calculated the mean value for each bin category. This mean smoothing method simplifies the variable by replacing each bin category with its average value, reducing noise while preserving the overall distribution trend.
+4. **Merging:** Finally, I merged the calculated mean values back into the original dataset.
+
+
+# Problem 2
+
+### Problem 2a: Applying SVM
+
+```{r svm}
+# Load necessary libraries
+library(e1071)
+library(caret)
+
+bank_data <- read.csv("BankData.csv")
+bank_data_clean <- bank_data[complete.cases(bank_data), ]
+
+bank_data_clean$approval <- as.factor(bank_data_clean$approval)
+
+train_control <- trainControl(method = "cv", number = 10)
+
+svm_model <- train(approval ~ ., data = bank_data_clean, method = "svmLinear", trControl = train_control)
+
+svm_model
+
+```
+### Applying SVM
+
+1. **Data Preparation:** I started with a fresh copy of the dataset and removed rows with missing values. The target variable approval was converted into a factor to indicate that it's a classification problem.
+
+2. **SVM Model:** I used the caret package to train an SVM with a linear kernel to predict the approval status. The model was trained using 10-fold cross-validation to ensure that the evaluation was robust.
+
+3. **10-Fold Cross-Validation:** This approach splits the data into 10 parts, trains the model on 9 parts, and tests it on the remaining part. This process repeats 10 times to provide an average accuracy.
+
+4. **Output:** The svm_model object displays the accuracy of the SVM model from the cross-validation, giving an overall measure of how well the model can predict loan approvals.
+
+
+### Code for 2b: Optimizing the C Parameter Using Grid Search
+```{r}
+grid <- expand.grid(C = seq(0.1, 2, by = 0.1))
+
+svm_model_grid <- train(approval ~ ., data = bank_data_clean, method = "svmLinear", trControl = train_control, tuneGrid = grid)
+
+svm_model_grid
+
+```
+
+### Answer for 2b: Grid Search to Optimize C Parameter
+
+1. **Grid Search:** I defined a grid of possible C values ranging from 0.1 to 2 in increments of 0.1 to find the optimal C parameter for the SVM model.
+
+2. **Model Training:** Using the train function from the caret package, I performed grid search with 10-fold cross-validation to select the best C value based on the model's performance.
+
+3. **Chosen Parameter and Accuracy:** The output (svm_model_grid) shows the best C parameter chosen by the grid search and its corresponding accuracy. This optimal C value balances the regularization, helping improve the model's predictive performance.
+
+
+### Answer for 2c: Why Accuracy Might Differ for the Same C Value
+
+1. **Cross-Validation Splits:** The accuracy might differ for the same C value due to the randomness in how data is split during cross-validation. In each run, different data points are used for training and testing, which can affect the model's performance and accuracy.
+
+2. **Data Variability:** If the dataset has variability (e.g., slight class imbalances, outliers, or noise), different cross-validation splits will expose the model to different subsets of data. This can lead to variations in the accuracy, even when using the same C value.
+
+3. **Regularization Sensitivity:** The C parameter controls the regularization in SVM. Depending on the particular subset of data used during each fold of cross-validation, the model's sensitivity to this regularization might change, causing slight fluctuations in accuracy.
+
+
+# Problem 3
+
+### Problem 3a: Several variables are categorical. We will use dummy variables to make it possible for SVM to use these. Leave the gender category out of the dummy variable conversion to use as a categorical for prediction. Show the resulting head.
+```{r}
+library(dplyr)
+library(caret)
+
+data("starwars")
+
+starwars_clean <- starwars %>% select(-films, -vehicles, -starships, -name)
+
+starwars_clean <- na.omit(starwars_clean)
+
+
+starwars_dummy <- dummyVars(gender ~ ., data = starwars_clean)
+starwars_transformed <- predict(starwars_dummy, newdata = starwars_clean)
+
+starwars_transformed <- as.data.frame(starwars_transformed)
+starwars_transformed$gender <- starwars_clean$gender
+
+head(starwars_transformed)
+
+```
+### Answer for 3a
+
+1. **Data Cleaning:** Loaded the starwars dataset and removed the columns films, vehicles, starships, and name. Also, removed rows with missing values to clean the data for model training.
+
+2. **Dummy Variable Conversion:** Used the dummyVars function from the caret package to convert categorical variables into dummy variables, leaving gender out as it will be the target variable for prediction.
+
+3. **Final Dataset:** Displayed the first few rows of the transformed dataset to show its new structure with dummy variables. This modified dataset is now ready for SVM training.
+
+### Problem 3b.Use SVM to predict gender and report the accuracy.
+```{r}
+library(dplyr)
+library(caret)
+library(e1071)
+
+data("starwars")
+
+starwars_clean <- starwars %>% select(-films, -vehicles, -starships, -name)
+
+starwars_clean <- na.omit(starwars_clean)
+
+starwars_dummy <- dummyVars(gender ~ ., data = starwars_clean)
+starwars_transformed <- predict(starwars_dummy, newdata = starwars_clean)
+
+starwars_transformed <- as.data.frame(starwars_transformed)
+starwars_transformed$gender <- starwars_clean$gender
+
+train_control <- trainControl(method = "cv", number = 10)
+
+svm_model <- train(gender ~ ., data = starwars_transformed, method = "svmLinear", trControl = train_control)
+
+svm_model
+
+```
+### Answer for 3b
+
+1. **Data Preparation:** The dataset was cleaned and preprocessed by removing unnecessary columns, handling missing values, and converting categorical variables to dummy variables.
+
+2. **SVM Model:** An SVM model with a linear kernel was trained to predict the gender variable using 10-fold cross-validation for a robust evaluation.
+
+3. **Accuracy:** The output of the code (svm_model) provides the accuracy of the SVM model in predicting the gender. The cross-validation helps in assessing how well the model generalizes to new data.
+
+### Problem 3c. Given that we have so many variables, it makes sense to consider using PCA. Run PCA on the data and determine an appropriate number of components to use. Document how you made the decision, including any graphs you used. Create a reduced version of the data with that number of principle components. Note: make sure to remove gender from the data before running PCA because it would be cheating if PCA had access to the label you will use. Add it back in after reducing the data and show the result.
+
+```{r}
+data("starwars")
+
+starwars_clean <- starwars %>% select(-films, -vehicles, -starships, -name)
+
+starwars_clean <- na.omit(starwars_clean)
+
+starwars_dummy <- dummyVars(gender ~ ., data = starwars_clean)
+starwars_transformed <- predict(starwars_dummy, newdata = starwars_clean)
+
+starwars_transformed <- as.data.frame(starwars_transformed)
+gender <- starwars_clean$gender 
+
+pca_model <- prcomp(starwars_transformed, center = TRUE, scale. = TRUE)
+
+pca_variance <- pca_model$sdev^2 / sum(pca_model$sdev^2)
+variance_df <- data.frame(PC = 1:length(pca_variance), Variance = cumsum(pca_variance))
+
+ggplot(variance_df, aes(x = PC, y = Variance)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Cumulative Variance Explained by Principal Components",
+       x = "Principal Component",
+       y = "Cumulative Variance Explained")
+
+# Determine the number of components that explain at least 90% of the variance
+num_components <- min(which(cumsum(pca_variance) >= 0.90))
+
+# Create a reduced version of the dataset using the selected number of components
+starwars_reduced <- data.frame(pca_model$x[, 1:num_components])
+
+starwars_reduced$gender <- gender
+
+# Show the first few rows of the reduced dataset
+head(starwars_reduced)
+
+```
+
+### Answer for 3c
+
+1. **Data Preparation:** The dataset was cleaned and preprocessed by removing unwanted columns, handling missing values, and converting categorical variables into dummy variables. The gender column was set aside to be added back later.
+
+2. **PCA Execution:** Performed PCA on the transformed dataset (excluding the gender column). PCA was run with centering and scaling to ensure all variables contributed equally.
+
+3. **Selecting the Number of Components:** 
+   - Plotted the cumulative variance explained by the principal components.
+   - Determined the number of components that explain at least 90% of the variance by analyzing the plot. In this case, we selected the number of components using the line:
+```{r}
+num_components <- min(which(cumsum(pca_variance) >= 0.90))
+```
+
+   - This ensures we retain the majority of the data's variance while reducing its dimensionality.
+
+4. **Reduced Dataset:** Created a reduced dataset with the selected number of principal components and then added the gender column back into this reduced dataset.
+
+5. **Result:** Displayed the first few rows of the reduced dataset, now ready for further modeling or analysis. This approach helps in simplifying the dataset while preserving the most significant information.
+
+
+### Problem 3d. Use SVM to predict gender again, but this time use the data resulting from PCA. Evaluate the results with a confusion matrix and at least two partitioning methods, using grid search on the C parameter each time.
+
+```{r}
+
+starwars_reduced$gender <- as.factor(starwars_reduced$gender)
+
+grid <- expand.grid(C = seq(0.1, 2, by = 0.1))
+
+train_control_10cv <- trainControl(method = "cv", number = 10)
+svm_model_10cv <- train(gender ~ ., data = starwars_reduced, method = "svmLinear", trControl = train_control_10cv, tuneGrid = grid)
+
+predictions_10cv <- predict(svm_model_10cv, starwars_reduced)
+confusionMatrix(predictions_10cv, starwars_reduced$gender)
+
+train_control_repeatedcv <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+svm_model_repeatedcv <- train(gender ~ ., data = starwars_reduced, method = "svmLinear", trControl = train_control_repeatedcv, tuneGrid = grid)
+
+predictions_repeatedcv <- predict(svm_model_repeatedcv, starwars_reduced)
+confusionMatrix(predictions_repeatedcv, starwars_reduced$gender)
+```
+
+### Answer for 3d: Using SVM to Predict gender with PCA Data
+
+1. **Data Preparation:** 
+   - I used the PCA-transformed dataset with the selected principal components and the gender column as the target variable for prediction.
+   - Converted gender into a factor to set up the classification task.
+
+2. **SVM with Cross-Validation:**
+   - Applied SVM with a linear kernel to the reduced dataset.
+   - Used **10-fold cross-validation** for evaluation, performing grid search to find the best C parameter.
+
+3. **Results with 10-Fold Cross-Validation:**
+   - The optimal C value was found to be 0.1, as indicated by the grid search.
+   - The accuracy of the SVM model was approximately **86.33%**, with a Kappa of **0.728**. This accuracy suggests that the model performed well on the dataset, providing a good balance between true positive and true negative rates.
+
+4. **Confusion Matrix Analysis:** 
+   - The confusion matrix showed high accuracy, correctly predicting both feminine and masculine classes.
+   - The final balanced accuracy was **100%**, indicating that the model perfectly classified the samples in this specific run. However, it’s important to note that perfect accuracy may vary with different data splits in cross-validation.
+
+5. **Partitioning Methods:** 
+   - The model was evaluated using two partitioning methods: **10-fold cross-validation** and **repeated cross-validation**.
+   - In both cases, the SVM model showed high performance, which indicates the effectiveness of PCA in reducing dimensionality while preserving key information.
+
+
+### Problem 3e: Whether or not it has improved the accuracy, what has PCA done for the complexity of the model?
+
+### Answer for 3e:
+
+PCA has significantly reduced the complexity of the model by decreasing the number of features in the dataset. Originally, the dataset had a large number of variables (after converting categorical variables to dummy variables), which can make the model complex and computationally expensive to train.
+
+By using PCA, we condensed the information into a smaller set of principal components that capture most of the variance in the data. This dimensionality reduction simplifies the model, reduces the risk of overfitting, and speeds up the training process. 
+
+Even if the accuracy did not improve substantially, the model now operates more efficiently with fewer components, which makes it more scalable and easier to interpret. In essence, PCA has helped streamline the model while retaining its predictive power.
+
+
+# Bonus Problem
+
+### Problem 4a: Explore the variables to see if they have reasonable distributions and show your work. We will be predicting the type variable – does that mean we have a class imbalance?
+
+```{r}
+
+
+data(Sacramento)
+
+
+sacramento_clean <- Sacramento %>% select(-zip, -city)
+
+
+summary(sacramento_clean)
+
+numerical_vars <- c('price', 'beds', 'baths', 'sqft', 'latitude', 'longitude')
+for (var in numerical_vars) {
+  p <- ggplot(sacramento_clean, aes_string(x = var)) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+    labs(title = paste("Distribution of", var), x = var, y = "Count") +
+    theme_minimal()
+  print(p)  
+}
+
+
+ggplot(sacramento_clean, aes(x = type)) +
+  geom_bar(fill = "salmon") +
+  labs(title = "Distribution of 'type'", x = "Type", y = "Count") +
+  theme_minimal()
+
+```
+
+### Answer for 4a:
+
+1. **Data Cleaning:** Loaded the Sacramento dataset and removed the zip and city columns, as they are not relevant for analysis.
+
+2. **Summary Statistics:** Displayed a summary of the dataset to inspect the basic statistics of each variable, including the minimum, maximum, mean, median, and counts of each category.
+
+3. **Visualizing Numerical Variables:** 
+   - Plotted histograms for numerical variables (price, beds, baths, sqft, latitude, and longitude) to examine their distributions.
+   - This step helps identify potential skewness, outliers, or irregularities in the data.
+
+4. **Visualizing Categorical Variable (type):**
+   - Used a bar plot to show the distribution of the type variable, which indicates the different housing types.
+   - This visualization reveals if there is a class imbalance, which would affect model predictions. For example, if one category (like "Residential") is much more prevalent than others, it indicates a class imbalance.
+
+5. **Class Imbalance:** From the bar plot, you can determine if there is a class imbalance in the type variable. If one type (e.g., "Residential") significantly outnumbers the others, then a class imbalance is present. This imbalance can affect the performance of classification models, which might bias towards the majority class.
+
+
+### Problem 4b. There are lots of options for working on the data to try to improve the performance of SVM, including (1) removing other variables that you know should not be part of the prediction, (2) dealing with extreme variations in some variables with smoothing, normalization or a log transform, (3) applying PCA, and (4) to removing outliers. Pick one now and continue.
+
+```{r}
+
+data(Sacramento)
+
+sacramento_clean <- Sacramento %>% select(-zip, -city)
+
+sacramento_clean$log_price <- log(sacramento_clean$price)
+
+ggplot(sacramento_clean, aes(x = log_price)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Log-Transformed Price", x = "Log(Price)", y = "Count") +
+  theme_minimal()
+
+sacramento_clean <- sacramento_clean %>% select(-price)
+
+
+```
+### Answer for 4b: Applying Log Transformation to Handle Extreme Variations
+
+For this step, I chose to deal with extreme variations in the price variable by applying a log transformation. Here’s the approach taken:
+
+1. **Log Transformation:** 
+   - The price variable was log-transformed to handle its extreme variations. This reduces skewness and compresses the range of values, making the distribution more normal-like, which can improve the performance of the SVM model.
+
+2. **Visualization:** 
+   - A histogram of the log-transformed price was created to visualize the new distribution. The log transformation has stabilized the variance and reduced the effect of outliers, which is helpful for the SVM model.
+
+3. **Dropping Original price Column:**
+   - The original price column was removed to avoid using the raw, skewed data. The transformed log_price will be used in further analysis and modeling.
+
+
+
+### Problem 4c. Use SVM to predict type and use grid search to get the best accuracy you can. The accuracy may be good, but look at the confusion matrix as well. Report what you find. Note that the kappa value provided with your SVM results can also help you see this. It is a measure of how well the classifier performed that takes into account the frequency of the classes.
+
+```{r}
+
+data(Sacramento)
+sacramento_clean <- Sacramento %>% select(-zip, -city)
+
+sacramento_clean$log_price <- log(sacramento_clean$price)
+
+sacramento_clean <- sacramento_clean %>% select(-price)
+
+sacramento_clean$type <- as.factor(sacramento_clean$type)
+
+grid <- expand.grid(C = seq(0.1, 2, by = 0.1))
+
+train_control <- trainControl(method = "cv", number = 10)
+
+svm_model <- train(type ~ ., data = sacramento_clean, method = "svmLinear", 
+                   trControl = train_control, tuneGrid = grid)
+
+svm_model
+
+predictions <- predict(svm_model, sacramento_clean)
+
+confusion_matrix <- confusionMatrix(predictions, sacramento_clean$type)
+
+confusion_matrix
+
+```
+### Answer for 4c: SVM with Grid Search and Evaluation
+
+1. **Overall Accuracy:** The model achieved an accuracy of **93.78%**. However, this is misleading due to the class imbalance in the dataset.
+
+2. **Kappa Value:** The Kappa value is **0.2584**, indicating a weak agreement and bias toward the majority class ("Residential").
+
+3. **Class Performance:**
+   - **Condo:** Low sensitivity (20.75%), meaning poor detection of "Condo" properties.
+   - **Multi_Family:** Sensitivity is **0**, indicating the model failed to detect any "Multi_Family" instances.
+   - **Residential:** High sensitivity (99.65%) but struggles to identify non-"Residential" classes.
+
+4. **Conclusion:** The model is biased towards "Residential," ignoring minority classes. Despite high accuracy, the low Kappa and confusion matrix highlight poor performance in predicting "Condo" and "Multi_Family."
+
+
+### Problem 4d. Return to (b) and try at least one other way to try to improve the data before running SVM again, as in (c).
+
+```{r}
+
+data(Sacramento)
+sacramento_clean <- Sacramento %>% select(-zip, -city)
+
+sacramento_clean$log_price <- log(sacramento_clean$price)
+
+sacramento_clean <- sacramento_clean %>% select(-price)
+
+Q1 <- quantile(sacramento_clean$sqft, 0.25)
+Q3 <- quantile(sacramento_clean$sqft, 0.75)
+IQR <- Q3 - Q1
+
+sacramento_clean <- sacramento_clean %>%
+  filter(sqft >= (Q1 - 1.5 * IQR) & sqft <= (Q3 + 1.5 * IQR))
+
+sacramento_clean$type <- as.factor(sacramento_clean$type)
+
+grid <- expand.grid(C = seq(0.1, 2, by = 0.1))
+
+train_control <- trainControl(method = "cv", number = 10)
+
+svm_model <- train(type ~ ., data = sacramento_clean, method = "svmLinear", 
+                   trControl = train_control, tuneGrid = grid)
+
+predictions <- predict(svm_model, sacramento_clean)
+
+confusion_matrix <- confusionMatrix(predictions, sacramento_clean$type)
+
+svm_model
+confusion_matrix
+```
+
+### Answer for 4d: Removing Outliers and Running SVM Again
+In this step, I removed outliers from the `sqft` variable to improve the data before running SVM. After applying SVM with cross-validation and grid search, the model's performance was evaluated using a confusion matrix. This preprocessing step aimed to reduce noise and help the model generalize better.
+
+
+
+### Problem 4e. In the end, some data are just so imbalanced that a classifier is never going to predict the minority class. Dealing with this is a huge topic. One simple possibility is to conclude that we do not have enough data to support predicting the very infrequent class(es) and remove them. If they are not actually important to the reason we are making the prediction, that could be fine. Another approach is to force the data to be more even by sampling.
+
+```{r}
+
+data(Sacramento)
+sacramento_clean <- Sacramento %>% select(-zip, -city)
+
+
+sacramento_clean$log_price <- log(sacramento_clean$price)
+
+sacramento_clean <- sacramento_clean %>% select(-price)
+
+Q1 <- quantile(sacramento_clean$sqft, 0.25)
+Q3 <- quantile(sacramento_clean$sqft, 0.75)
+IQR <- Q3 - Q1
+sacramento_clean <- sacramento_clean %>%
+  filter(sqft >= (Q1 - 1.5 * IQR) & sqft <= (Q3 + 1.5 * IQR))
+
+sacramento_clean$type <- as.factor(sacramento_clean$type)
+
+sacramento_balanced <- upSample(x = sacramento_clean, y = sacramento_clean$type)
+
+grid <- expand.grid(C = seq(0.1, 2, by = 0.1))
+
+train_control <- trainControl(method = "cv", number = 10)
+
+svm_model <- train(Class ~ ., data = sacramento_balanced, method = "svmLinear", 
+                   trControl = train_control, tuneGrid = grid)
+
+predictions <- predict(svm_model, sacramento_balanced)
+
+confusion_matrix <- confusionMatrix(predictions, sacramento_balanced$Class)
+
+svm_model
+confusion_matrix
+
+```
+
+### Answer for 4e: Addressing Class Imbalance and Running SVM Again
+
+1. **Model Performance:**
+   - The SVM model achieved **100% accuracy** with a Kappa value of **1**, indicating perfect agreement between predicted and true values. This suggests that the classifier predicted all classes correctly after oversampling the dataset.
+
+2. **Confusion Matrix:**
+   - Each class ("Condo," "Multi_Family," and "Residential") was perfectly classified with **no misclassifications**. The model predicted 806 instances for each class accurately, highlighting balanced detection across all categories.
+
+3. **Balanced Accuracy:** 
+   - The balanced accuracy for each class is **1.0000**, indicating that the model is correctly identifying both positive and negative cases for all classes, thanks to the balanced sampling.
+
+4. **Interpretation:**
+   - Oversampling addressed the class imbalance, allowing the model to predict each class equally well. However, achieving **100% accuracy** is unusual and suggests the model might be overfitting to the training data due to the synthetic nature of oversampling.
+   - Further testing on an independent validation set is recommended to ensure that this performance generalizes beyond the training data. 
+
+
+### Problem : Create a copy of the data that includes all the data from the two smaller classes, plus a small random sample of the large class (you can do this by separating those data with a filter, sampling, then attaching them back on). Check the distributions of the variables in this new data sample to make sure they are reasonably close to the originals using visualization and/or summary statistics. We want to make sure we did not get a strange sample where everything was cheap or there were only studio apartments, for example. You can rerun the sampling a few times if you are getting strange results. If it keeps happening, check your process.
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+
+# Assuming sacramento_clean has been created
+# Creating balanced_sample with smaller classes and a sample from the larger class
+smaller_classes <- sacramento_clean %>% filter(type %in% c("Condo", "Multi_Family"))
+
+set.seed(123)  # Setting a seed for reproducibility
+residential_sample <- sacramento_clean %>%
+  filter(type == "Residential") %>%
+  sample_n(size = nrow(smaller_classes))
+
+# Combine the smaller classes with the random sample of the larger class
+balanced_sample <- bind_rows(smaller_classes, residential_sample)
+
+# Ensure the balanced_sample is created successfully
+summary(balanced_sample)
+
+# List of numerical variables to visualize
+numerical_vars <- c('log_price', 'beds', 'baths', 'sqft', 'latitude', 'longitude')
+
+# Loop through each numerical variable to create and print histograms
+for (var in numerical_vars) {
+  p <- ggplot(balanced_sample, aes_string(x = var)) +
+    geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+    labs(title = paste("Distribution of", var, "in Balanced Sample"), x = var, y = "Count") +
+    theme_minimal()
+  
+  print(p)  # Print each plot
+}
+
+# Visualize the categorical variable 'type'
+ggplot(balanced_sample, aes(x = type)) +
+  geom_bar(fill = "salmon") +
+  labs(title = "Distribution of 'type' in Balanced Sample", x = "Type", y = "Count") +
+  theme_minimal()
+
+
+```
+
+### Problem :Use SVM to predict type one this new, more balanced dataset and report its performance with a confusion matrix and with grid search to get the best accuracy.
+
+```{r}
+library(caret)
+library(e1071)
+
+balanced_sample$type <- as.factor(balanced_sample$type)
+
+grid <- expand.grid(C = seq(0.1, 2, by = 0.1))
+
+train_control <- trainControl(method = "cv", number = 10)
+
+svm_model <- train(type ~ ., data = balanced_sample, method = "svmLinear", 
+                   trControl = train_control, tuneGrid = grid)
+
+predictions <- predict(svm_model, balanced_sample)
+
+confusion_matrix <- confusionMatrix(predictions, balanced_sample$type)
+print(confusion_matrix)
+
+print(svm_model)
+
+```
+
+### Answer:
+
+The Support Vector Machine (SVM) model was trained on the new balanced dataset with 130 samples and 6 predictors using a linear kernel. The 10-fold cross-validation was employed to identify the best regularization parameter C using grid search, ranging from 0.1 to 2.0.
+
+### Grid Search Results:
+- The accuracy ranged from **83.09%** to **86.24%** as the parameter C was varied.
+- The highest accuracy achieved was **86.24%** with a Kappa value of **0.7531**, indicating a strong agreement between predicted and actual classes.
+- The optimal value of the C parameter chosen by the model was **0.4**.
+
+### Interpretation:
+- The relatively high accuracy (86.24%) suggests that the SVM model with a linear kernel performs well on the balanced dataset.
+- The Kappa value (0.7531) further supports that the model has a good classification ability, accounting for the agreement beyond chance.
+- The confusion matrix (not shown in the output provided) would provide detailed insights into the model’s performance for each class ('Condo', 'Multi_Family', 'Residential').
+
+This analysis indicates that the SVM model is effective for this balanced dataset, achieving an accuracy of over 86%.
+
+
+### Bonus Problem: To understand just how much different subsets can differ, create a 5 fold partitioning of the cars data included in R (mtcars) and visualize the distribution of the gears variable across the folds. Rather than use the fancy trainControl methods for making the folds, create them directly so you actually can keep track of which data points are in which fold. This is not covered in the tutorial, but it is quick. Here is code to create 5 folds and a variable in the data frame that contains the fold index of each point. Use that resulting data frame to create your visualization.
+
+```{r}
+library(caret)
+library(ggplot2)
+
+mycars <- mtcars 
+
+mycars$folds <- 0 
+
+flds <- createFolds(1:nrow(mycars), k = 5, list = TRUE)
+
+for (i in 1:5) { 
+  mycars$folds[flds[[i]]] <- i 
+}
+
+mycars$gear <- as.factor(mycars$gear)
+mycars$folds <- as.factor(mycars$folds)
+
+ggplot(mycars, aes(x = gear, fill = folds)) +
+  geom_bar(position = "dodge") +
+  labs(title = "Distribution of 'gear' Variable Across Folds", x = "Gears", y = "Count") +
+  theme_minimal()
+```
+
+### Explanation:
+
+1. **Copy the Dataset:** A copy of mtcars is made to mycars.
+2. **Initialize Fold Indices:** A new column folds is added to store the fold indices.
+3. **Create Folds:** createFolds from the caret package is used to partition the dataset into 5 folds.
+4. **Assign Folds:** A for loop iterates through each fold and assigns the fold index to the corresponding rows in the dataset.
+5. **Convert to Factors:** The gear and folds columns are converted to factors for proper visualization.
+6. **Visualize:** The distribution of the gear variable across the folds is visualized using a bar plot, with the folds differentiated by color.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
