@@ -1,0 +1,654 @@
+---
+title: "Heart Disease Risk Analysis"
+author: "Rohit Goutam Maity"
+date: "2024-11-12"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+Student ID:2188913
+
+```{r library(tidyverse) }```
+
+# (A)DATA GATHERING AND INTEGRATION
+
+## Importing our dataset & Loading Required Libraries
+
+```{r}
+# Load essential libraries for data manipulation, visualization, and modeling
+library(tidyverse)   # For data handling and plotting
+library(dplyr)       # For data manipulation
+library(caret)       # For model training and evaluation
+library(e1071)       # For SVM modeling
+library(ggplot2)     # For visualization
+library(rpart)       # For decision tree modeling
+library(ggfortify)   # For PCA visualization
+library(kknn)        # For KNN model with tuning
+
+```
+
+```{r}
+# Load the heart disease dataset and display the first few rows
+heart <- read.csv("heart.csv", header = TRUE, sep = ",")
+head(heart)
+
+```
+
+```{r}
+# Examine the structure and columns of the dataset
+str(heart)
+names(heart)
+```
+
+Explanation: After loading the dataset, the structure and column names are inspected to understand the types and organization of the data. This step is essential for assessing variable formats (e.g., numeric vs. categorical) and potential cleaning needs.
+
+# (B)DATA EXPLORATION
+
+## Exploring our dataset
+
+```{r}
+# Display summary statistics for all columns
+summary(heart)
+```
+
+```{r}
+# Analyze key groupings in the data to identify trends by categorical variables
+# Grouping by Chest Pain Type
+heart %>% group_by(ChestPainType) %>% summarise(count = n())
+
+# Grouping by Heart Disease status
+heart %>% group_by(HeartDisease) %>% summarise(count = n())
+
+# Group by Resting ECG
+heart %>% group_by(RestingECG) %>% summarise(count = n())
+
+# Group by ST Slope
+heart %>% group_by(ST_Slope) %>% summarise(count = n())
+
+# Group by Sex and find mean Cholesterol level
+heart %>% group_by(Sex) %>% summarize(avg_cholesterol = mean(Cholesterol, na.rm = TRUE))
+
+# Group by Sex and find mean of Max Heart Rate
+heart %>% group_by(Sex) %>% summarize(avg_heartrate = mean(MaxHR, na.rm = TRUE))
+
+# Count heart disease occurrences by Sex
+heart %>% group_by(Sex) %>% count(HeartDisease)
+
+# Count heart disease occurrences by Chest Pain Type
+heart %>% group_by(ChestPainType) %>% count(HeartDisease)
+
+```
+
+
+Explanation: Summary statistics provide a foundational overview, while grouped summaries allow us to observe patterns across categorical variables, such as the distribution of heart disease cases by chest pain type or sex. These insights guide data preprocessing and model feature selection.
+
+## Visualizing Data Distributions
+
+```{r}
+# Plot histograms for key numerical variables to assess distribution patterns
+ggplot(heart, aes(Age)) + geom_histogram(binwidth = 7) + ggtitle("Age Distribution")
+ggplot(heart, aes(MaxHR)) + geom_histogram(binwidth = 15) + ggtitle("Max Heart Rate Distribution")
+ggplot(heart, aes(RestingBP)) + geom_histogram(binwidth = 20) + ggtitle("Resting Blood Pressure Distribution")
+ggplot(heart, aes(Cholesterol)) + geom_histogram(binwidth = 50) + ggtitle("Cholesterol Level Distribution")
+ggplot(heart, aes(Oldpeak)) + geom_histogram(binwidth = 2) + ggtitle("Oldpeak Distribution")
+```
+## Bar Plots for Categorical Variables
+
+```{r}
+# Bar plots for categorical features to explore counts across categories
+ggplot(heart, aes(x = Sex)) + geom_bar() + ggtitle("Distribution by Sex")
+ggplot(heart, aes(x = ChestPainType)) + geom_bar() + ggtitle("Distribution by Chest Pain Type")
+ggplot(heart, aes(x = RestingECG)) + geom_bar() + ggtitle("Distribution by Resting ECG")
+ggplot(heart, aes(x = ExerciseAngina)) + geom_bar() + ggtitle("Distribution by Exercise-Induced Angina")
+ggplot(heart, aes(x = ST_Slope)) + geom_bar() + ggtitle("Distribution by ST Slope")
+```
+
+Explanation: Histograms and bar plots help visualize the spread of numerical and categorical variables, making it easier to identify outliers, skewness, and class imbalances. This exploration is key for feature engineering and model preparation.
+
+
+# (C)DATA CLEANING
+
+## Let’s do some data cleaning to better understand our data.
+
+```{r}
+# Check for missing values in each column
+colSums(is.na(heart))
+```
+
+It seems we don’t have any missing values in our data.
+
+Explanation: This step identifies any missing values, allowing us to decide on imputation or removal methods. Here, we're confirming that no columns contain missing data before moving to further cleaning.
+
+## Outlier Detection Using Box Plots
+
+```{r}
+# Visualize outliers in numerical columns using box plots
+boxplot(heart$RestingBP, main = "Resting Blood Pressure", xlab = "RestingBP")
+boxplot(heart$Cholesterol, main = "Cholesterol", xlab = "Cholesterol")
+boxplot(heart$MaxHR, main = "Maximum Heart Rate", xlab = "MaxHR")
+boxplot(heart$Oldpeak, main = "Oldpeak", xlab = "Oldpeak")
+boxplot(heart$Age, main = "Age", xlab = "Age")
+```
+
+Explanation: Box plots are useful for spotting outliers in numerical data. Outliers may skew the analysis, so it’s important to identify them here for potential removal.
+
+## Removing Outliers Based on IQR
+
+```{r}
+# Remove outliers for each numerical column using the IQR method
+remove_outliers <- function(data, column) {
+  Q1 <- quantile(data[[column]], 0.25)
+  Q3 <- quantile(data[[column]], 0.75)
+  IQR_value <- Q3 - Q1
+  subset(data, data[[column]] > (Q1 - 1.5 * IQR_value) & data[[column]] < (Q3 + 1.5 * IQR_value))
+}
+
+heart <- remove_outliers(heart, "RestingBP")
+heart <- remove_outliers(heart, "Cholesterol")
+heart <- remove_outliers(heart, "MaxHR")
+heart <- remove_outliers(heart, "Oldpeak")
+heart <- remove_outliers(heart, "Age")
+
+# Check updated dimensions after outlier removal
+dim(heart)
+```
+
+
+Explanation: Using the IQR method, we filter out data points that fall outside of 1.5 times the IQR. This helps create a cleaner dataset by reducing noise from extreme values, which could otherwise distort the model.
+
+
+## Converting Categorical Variables to Numeric
+
+```{r}
+# Convert ExerciseAngina from a character to an integer (0,1)
+heart$ExerciseAngina <- ifelse(heart$ExerciseAngina == "Y", 1, 0)
+head(heart)
+```
+
+Explanation: Some machine learning algorithms work best with numeric data. Here, converting ExerciseAngina to binary (0 and 1) allows us to incorporate it effectively in the modeling process.
+
+
+# (D)DATA PREPROCESSING
+
+## Let's start with Data preprocessing 
+
+```{r}
+# Categorize cholesterol levels into bins
+heart <- heart %>% mutate(ChRange = cut(Cholesterol, breaks = c(-1, 150, 200, 500), labels = c("Normal", "BorderlineHigh", "High")))
+head(heart)
+```
+
+Explanation: Binning Cholesterol into categories (e.g., Normal, Borderline High, High) simplifies the data and may reveal more interpretable patterns, which can be helpful for model insights.
+
+
+## Normalizing Data Using Standardization
+
+```{r}
+# Normalize numerical features
+heart_norm <- heart %>% select(-HeartDisease)
+preprocess <- preProcess(heart_norm, method = c("center", "scale"))
+norm <- predict(preprocess, heart_norm)
+norm$HeartDisease <- heart$HeartDisease
+```
+
+Explanation: Standardizing the dataset ensures that features have a mean of 0 and a standard deviation of 1, making them comparable in scale. This step is crucial for models sensitive to feature magnitudes, such as SVM.
+
+
+## Check Summary Statistics for Normalization
+
+```{r}
+# Summary statistics to confirm normalization
+summary(norm)
+```
+
+Explanation: Summary statistics allow you to quickly verify that each feature has been standardized. Ideally, the mean should be close to 0 and the standard deviation close to 1 for all numerical columns (excluding categorical or target variables).
+
+
+## Visualize the Distribution of Normalized Features
+
+```{r}
+# Histograms to visually inspect distributions of normalized data
+par(mfrow = c(2, 3))  # Set up plot grid for easier viewing
+
+# Plot histograms for key numerical features
+hist(norm$Age, main = "Age Distribution (Normalized)", xlab = "Age", col = "lightblue")
+hist(norm$RestingBP, main = "Resting BP Distribution (Normalized)", xlab = "Resting BP", col = "lightgreen")
+hist(norm$Cholesterol, main = "Cholesterol Distribution (Normalized)", xlab = "Cholesterol", col = "lightcoral")
+hist(norm$MaxHR, main = "Max Heart Rate Distribution (Normalized)", xlab = "MaxHR", col = "lightyellow")
+hist(norm$Oldpeak, main = "Oldpeak Distribution (Normalized)", xlab = "Oldpeak", col = "lightgray")
+```
+
+Explanation: Visualizing histograms of normalized features can confirm that they are centered around 0 with a consistent spread, indicating successful standardization. This is helpful to spot any remaining outliers or anomalies visually.
+
+
+## Checking for Outliers After Normalization
+
+```{r}
+# Box plots to confirm outlier removal in key features
+par(mfrow = c(2, 3))  # Set up plot grid
+
+# Plot box plots for key numerical features
+boxplot(norm$Age, main = "Age (Normalized)", xlab = "Age", col = "lightblue")
+boxplot(norm$RestingBP, main = "Resting BP (Normalized)", xlab = "Resting BP", col = "lightgreen")
+boxplot(norm$Cholesterol, main = "Cholesterol (Normalized)", xlab = "Cholesterol", col = "lightcoral")
+boxplot(norm$MaxHR, main = "Max Heart Rate (Normalized)", xlab = "MaxHR", col = "lightyellow")
+boxplot(norm$Oldpeak, main = "Oldpeak (Normalized)", xlab = "Oldpeak", col = "lightgray")
+```
+
+
+Explanation: Box plots are useful to confirm that outliers have been minimized or removed, indicating clean data ready for further analysis. This ensures that extreme values won’t disproportionately influence model training.
+
+
+# (E) DATA CLUSTERING
+
+##Let's perform Clustering
+
+## Load Additional Libraries for Clustering
+
+```{r}
+# Load libraries for clustering and visualization
+library(factoextra)   # For visualization of clustering results
+library(cluster)      # For advanced clustering algorithms
+```
+
+## Prepare Data for Clustering and Determine Optimal Number of Clusters
+
+```{r}
+# Exclude the target variable 'HeartDisease' and retain only numeric columns for clustering
+heart_clustering <- heart %>% select(-HeartDisease) %>% select_if(is.numeric)
+
+# Standardize the data to ensure all features have a similar scale
+preprocess <- preProcess(heart_clustering, method = c("center", "scale"))
+heart_scaled <- predict(preprocess, heart_clustering)
+
+# Use the Elbow Method to estimate the optimal number of clusters
+fviz_nbclust(heart_scaled, kmeans, method = "wss") + ggtitle("Elbow Method to Determine Optimal Clusters")
+
+# Use the Silhouette Method for an alternative cluster estimation
+fviz_nbclust(heart_scaled, kmeans, method = "silhouette") + ggtitle("Silhouette Method to Determine Optimal Clusters")
+
+# Calculate the Gap Statistic as a third measure for optimal clusters
+# Increase maximum iterations for kmeans within clusGap to improve convergence
+gap_stat <- clusGap(heart_scaled, FUN = function(x, k) kmeans(x, k, nstart = 25, iter.max = 50), K.max = 10, B = 50)
+fviz_gap_stat(gap_stat) + ggtitle("Gap Statistic for Optimal Clusters")
+
+```
+
+Explanation: Here, the dataset is standardized again (though already normalized earlier) to ensure consistency for clustering. We use the elbow, silhouette, and gap statistic methods to determine the optimal number of clusters, providing multiple perspectives to confirm the best choice.
+
+
+## Applying K-means Clustering
+
+```{r}
+# Set a random seed for reproducibility
+set.seed(13)
+
+# Apply K-means clustering with 4 clusters
+kmeans_model <- kmeans(heart_scaled, centers = 3, nstart = 25)
+kmeans_model
+```
+
+Explanation: We use 3 clusters based on the silhouette method to get the optimal number if clustering analyis (previously experimented with 4 clusters results were around the age of 44, 55, 56, 57 confirming that 3 clusters should work fine) and set nstart = 25 to ensure the clustering algorithm finds a stable result by trying multiple starting configurations.
+
+
+## Visualizing Clusters Using PCA
+
+```{r}
+# Visualizing clusters in 2D using PCA for dimensionality reduction
+fviz_cluster(kmeans_model, data = heart_scaled) + ggtitle("K-means Clustering with 4 Clusters (PCA Projection)")
+```
+
+Explanation: PCA reduces the dataset to two principal components, which allows us to visually inspect how well-separated the clusters are. This visualization helps us understand the clustering distribution in a simplified form.
+
+## Analyzing Cluster Characteristics
+
+```{r}
+# Add cluster assignments to the original dataset (excluding target variable for clarity)
+heart_with_clusters <- heart %>% select(-HeartDisease)
+heart_with_clusters$Cluster <- kmeans_model$cluster
+
+# Filter only numeric columns for clustering summary
+heart_with_clusters_numeric <- heart_with_clusters %>% select_if(is.numeric)
+
+# Calculate the mean of each numeric variable within each cluster
+cluster_summary <- aggregate(. ~ Cluster, data = heart_with_clusters_numeric, mean)
+cluster_summary
+```
+
+
+Explanation: By calculating the mean of each variable within each cluster, we can gain insights into the typical characteristics of individuals in each cluster. This summary helps in interpreting the differences across clusters, such as variations in cholesterol, age, and heart rate.
+
+
+# (F) DATA CLASSIFICATION
+
+## Performing Classification Methods & Splitting Data into Training and Test Sets
+
+Since we’re working with the HeartDisease target variable, we’ll implement two classifiers—Support Vector Machine (SVM) and K-Nearest Neighbors (KNN)—and tune their hyperparameters to optimize performance.
+
+```{r}
+# Load caret for model training and evaluation
+library(caret)
+
+# Split data into training (80%) and test (20%) sets
+set.seed(123)  # Set seed for reproducibility
+index <- createDataPartition(heart$HeartDisease, p = 0.8, list = FALSE)
+train_set <- heart[index, ]
+test_set <- heart[-index, ]
+```
+
+Explanation: We split the dataset into training and testing sets using an 80-20 split. This helps us evaluate model performance on unseen data, providing a realistic estimate of model accuracy.
+
+## 1. SVM Classifier with Hyperparameter Tuning
+
+```{r}
+# Ensure the HeartDisease column is treated as a binary factor for classification
+train_set$HeartDisease <- as.factor(train_set$HeartDisease)
+test_set$HeartDisease <- as.factor(test_set$HeartDisease)
+
+# Define train control for cross-validation
+train_control <- trainControl(method = "cv", number = 10)
+
+# Define a grid for tuning the C parameter in SVM
+svm_grid <- expand.grid(C = 10^seq(-3, 3, by = 0.5))
+
+# Train the SVM model using the training set
+svm_model <- train(HeartDisease ~ ., data = train_set, method = "svmLinear",
+                   trControl = train_control, tuneGrid = svm_grid)
+
+# Output best SVM model parameters
+svm_model
+```
+
+
+Explanation: We use a grid search to tune the C parameter, which controls the regularization in the SVM model. A 10-fold cross-validation is used to evaluate the performance of different parameter values, and the best model is selected based on accuracy.
+
+
+## 2. K-Nearest Neighbors (KNN) Classifier with Hyperparameter Tuning
+
+```{r}
+# Define a tuning grid for KNN with various values of k and distance metrics
+knn_grid <- expand.grid(kmax = 3:10, kernel = c("rectangular", "cos"), distance = 1:3)
+
+# Train the KNN model using the training set
+knn_model <- train(HeartDisease ~ ., data = train_set, method = "kknn",
+                   trControl = train_control, tuneGrid = knn_grid)
+
+# Output best KNN model parameters
+knn_model
+```
+
+Explanation: We tune the k parameter (number of neighbors), kernel (shape of the decision boundary), and distance metric in KNN. This ensures that we find the optimal configuration for accurately predicting heart disease.
+
+## Comparing Classifier Performance on Test Set
+
+```{r}
+# Predict on the test set using the tuned SVM model
+svm_predictions <- predict(svm_model, test_set)
+
+# Predict on the test set using the tuned KNN model
+knn_predictions <- predict(knn_model, test_set)
+
+# Confusion matrix and accuracy for SVM
+svm_conf_matrix <- confusionMatrix(svm_predictions, test_set$HeartDisease)
+svm_conf_matrix
+
+# Confusion matrix and accuracy for KNN
+knn_conf_matrix <- confusionMatrix(knn_predictions, test_set$HeartDisease)
+knn_conf_matrix
+```
+
+Explanation of KNN Model Confusion Matrix Results
+
+The KNN model achieved an accuracy of 81.16% on the test set, indicating that it correctly classified approximately 81% of the instances. Let’s break down the key metrics from the confusion matrix and what they imply about the model’s performance:
+
+1.Confusion Matrix Summary:
+
+ - True Negatives (TN): 59 cases were correctly predicted as "0" (no heart disease).
+
+ - False Positives (FP): 6 cases were incorrectly predicted as "0" when they actually had heart disease.
+
+ - False Negatives (FN): 20 cases were incorrectly predicted as "1" when they did not have heart disease.
+
+ - True Positives (TP): 53 cases were correctly predicted as "1" (heart disease).
+
+2.Accuracy (0.8116):
+
+ - Accuracy represents the proportion of correctly classified cases out of all cases. Here, 81.16% of predictions were correct. This is a solid performance, as it is significantly higher than the No Information Rate (NIR) of 57.25%, which is the accuracy expected by random chance.
+
+3.Kappa (0.6263):
+
+ - Kappa measures the agreement between predicted and actual classifications, adjusting for chance. A Kappa value of 0.6263 suggests moderate to substantial agreement, indicating that the model has a good ability to differentiate between classes.
+ 
+4.Sensitivity (0.7468):
+
+ - Sensitivity, or True Positive Rate, measures the model’s ability to correctly identify cases of no heart disease (class "0"). With a sensitivity of 74.68%, the model successfully identifies most negative cases but misses some.
+ 
+5.Specificity (0.8983):
+
+ - Specificity, or True Negative Rate, measures the model’s ability to correctly identify cases of heart disease (class "1"). At 89.83%, the model is highly accurate in predicting true positive cases, indicating strong performance in identifying heart disease.
+ 
+6.Positive Predictive Value (0.9077):
+
+ - Also known as precision, this metric indicates that when the model predicts "0" (no heart disease), it is correct 90.77% of the time. This high precision indicates that the model is reliable when predicting the absence of heart disease.
+
+7.Negative Predictive Value (0.7260):
+
+ - The Negative Predictive Value shows that when the model predicts "1" (heart disease), it is correct 72.60% of the time. This is slightly lower, which could indicate that the model occasionally misses heart disease cases.
+ 
+8.Balanced Accuracy (0.8226):
+
+ - Balanced Accuracy is the average of Sensitivity and Specificity, accounting for any imbalance in class distribution. At 82.26%, this metric confirms that the model maintains consistent performance across both classes.
+ 
+9.McNemar's Test (P-Value: 0.01079):
+
+ - McNemar's test checks if there’s a significant difference in the model's ability to classify the two classes correctly. A p-value of 0.01079 indicates a significant difference, suggesting that the model might slightly favor one class over the other.
+
+# (G)DATA EVALUATION
+
+## Choosing the Best Classifier by Comparing Metrics
+
+Since we’ve already seen the confusion matrix for each model, we can use precision, recall, and the area under the ROC curve (AUC) to further compare their performance. Here’s how to calculate these metrics and plot the ROC curve.
+
+```{r}
+# Precision, Recall, and F1 Score for SVM
+svm_precision <- svm_conf_matrix$byClass["Pos Pred Value"]
+svm_recall <- svm_conf_matrix$byClass["Sensitivity"]
+svm_f1 <- 2 * ((svm_precision * svm_recall) / (svm_precision + svm_recall))
+
+cat("SVM Precision:", svm_precision, "\n")
+cat("SVM Recall:", svm_recall, "\n")
+cat("SVM F1 Score:", svm_f1, "\n")
+
+# Precision, Recall, and F1 Score for KNN
+knn_precision <- knn_conf_matrix$byClass["Pos Pred Value"]
+knn_recall <- knn_conf_matrix$byClass["Sensitivity"]
+knn_f1 <- 2 * ((knn_precision * knn_recall) / (knn_precision + knn_recall))
+
+cat("KNN Precision:", knn_precision, "\n")
+cat("KNN Recall:", knn_recall, "\n")
+cat("KNN F1 Score:", knn_f1, "\n")
+```
+1.Precision:
+
+ - SVM Precision: 0.8676
+ 
+ - KNN Precision: 0.9077
+ 
+ - Interpretation: Precision measures how often the model is correct when it predicts a positive case (in this context, predicting no heart disease). A higher precision indicates fewer false positives. Here, KNN has a slightly higher precision than SVM, meaning that KNN is marginally better at avoiding false positives.
+ 
+2.Recall (Sensitivity):
+
+ - SVM Recall: 0.7468
+
+ - KNN Recall: 0.7468
+
+ - Interpretation: Recall (or Sensitivity) measures how well the model identifies actual positive cases (true positives), which here refers to correctly identifying individuals with no heart disease. Both models have the same recall of 0.7468, meaning they correctly identify about 75% of the actual positive cases. This suggests that both models have similar performance in terms of recall.
+
+3.F1 Score:
+
+ - SVM F1 Score: 0.8027
+
+ - KNN F1 Score: 0.8194
+
+ - Interpretation: The F1 score is the harmonic mean of precision and recall, providing a single metric that balances both. A higher F1 score indicates a better balance between precision and recall. Here, KNN has a slightly higher F1 score than SVM, meaning it achieves a better trade-off between precision and recall.
+
+4.Summary of Findings:
+
+ - KNN outperforms SVM in terms of precision and F1 score, meaning that it provides a slightly better balance between correctly predicting positive cases and avoiding false positives.
+ 
+ - Both models have the same recall, suggesting they are equally effective at identifying true positive cases.
+ 
+In conclusion, based on these metrics, KNN may be a slightly better choice for this dataset due to its higher precision and F1 score. However, both models demonstrate strong performance and could be suitable depending on whether minimizing false positives (precision) or maximizing true positives (recall) is more important for the application.
+
+
+
+## Plot ROC Curves and Calculate AUC for Each Model
+
+```{r}
+# Load pROC library for ROC curve analysis
+library(pROC)
+
+# ROC and AUC for SVM
+svm_roc <- roc(response = test_set$HeartDisease, predictor = as.numeric(svm_predictions))
+plot(svm_roc, col = "blue", main = "ROC Curves for SVM and KNN", print.auc = TRUE)
+legend("bottomright", legend = c("SVM"), col = "blue", lwd = 2)
+
+# ROC and AUC for KNN
+knn_roc <- roc(response = test_set$HeartDisease, predictor = as.numeric(knn_predictions))
+plot(knn_roc, col = "red", add = TRUE, print.auc = TRUE)
+legend("bottomright", legend = c("SVM", "KNN"), col = c("blue", "red"), lwd = 2)
+
+```
+
+Explanation: The ROC curve visually represents the trade-off between sensitivity (True Positive Rate) and 1 - specificity (False Positive Rate). The AUC (Area Under Curve) measures the model's ability to discriminate between positive and negative classes. A higher AUC indicates better model performance.
+
+
+Final Model Comparison 
+
+1.Accuracy:
+
+ - SVM and KNN models both achieved high accuracy, indicating they are both suitable for predicting heart disease risk. However, their performance across other metrics can help determine the best choice.
+
+2.Precision, Recall, and F1 Score:
+
+ - KNN had slightly better precision and F1 scores, suggesting it might handle false positives more effectively while maintaining a good balance between precision and recall.
+
+ - Both models had the same recall, indicating similar sensitivity to true positive cases. This balance between false positives and true positives is crucial in medical contexts where minimizing false positives is often desired to reduce unnecessary treatments.
+
+3.AUC (Area Under the Curve):
+
+ - The AUC values from the ROC curves were very close for both models, with KNN showing a marginally higher AUC than SVM. This further supports KNN as a strong performer in distinguishing between heart disease and no heart disease.
+
+4.Interpretability:
+
+ - SVM models are generally easier to interpret due to their linear nature and are less sensitive to noise compared to KNN, which can be impacted by the choice of neighbors and distance metric.
+ 
+ - If interpretability is crucial, SVM might be preferred despite the slight edge KNN has in performance metrics.
+ 
+Final Decision
+Based on the evaluation metrics (accuracy, precision, recall, F1 score, and AUC) and interpretability considerations:
+
+KNN is recommended if we prioritize higher precision and slightly better AUC, especially if the application can tolerate a model with sensitivity to neighbors and distance metrics.
+
+SVM is a strong alternative if we need a more interpretable model that still maintains competitive performance.
+
+
+# (H) REPORT
+
+1. Project Overview
+
+This project analyzes clinical data to predict the risk of heart disease using machine learning models. The goal is to build a predictive model that could aid healthcare providers in identifying individuals at high risk of heart disease, potentially enabling early intervention and better patient outcomes.
+
+2. Dataset
+
+ - Source: The dataset used for this project is the Heart Failure Prediction Dataset from Kaggle.
+
+  -Features: The dataset includes features such as age, sex, cholesterol level, blood pressure, chest pain type, and other clinical indicators associated with heart disease risk.
+
+ - Target Variable: The target variable is HeartDisease, indicating whether an individual has a high risk of heart disease (1) or not (0).
+
+3. Methodology
+
+The analysis was divided into the following steps:
+
+ - Data Preprocessing: The dataset was checked for missing values and outliers. Non-numeric columns were converted into appropriate numeric representations, and the data was standardized to ensure consistent scale across features.
+
+ - Data Exploration: Summary statistics and visualizations, such as histograms and bar plots, were used to understand the distribution of variables and identify any patterns or relationships between features.
+
+ - Clustering: Using K-means clustering, the dataset was divided into groups to explore possible patient subgroups based on their health metrics. The optimal number of clusters was determined using methods like the elbow and silhouette techniques.
+
+ - Classification: Two classification algorithms, Support Vector Machine (SVM) and K-Nearest Neighbors (KNN), were trained on the data. Grid search and cross-validation were used to tune hyperparameters for both models, maximizing their performance.
+
+ - Evaluation: The models were evaluated using metrics such as accuracy, precision, recall, F1 score, and ROC-AUC. The ROC curves provided a visual comparison, and AUC values offered a summary of each model's classification ability.
+
+4. Results
+
+Model Performance: Both models showed strong predictive performance:
+
+SVM achieved a precision of 0.8676, a recall of 0.7468, and an F1 score of 0.8027.
+
+KNN achieved a precision of 0.9077, a recall of 0.7468, and an F1 score of 0.8194.
+
+ROC-AUC: Both models had similar AUC values around 0.82–0.83, indicating strong ability to distinguish between positive and negative cases.
+
+Final Model Choice: Based on evaluation metrics, KNN was slightly favored due to its higher precision and F1 score. However, SVM remains a strong alternative, especially if interpretability is prioritized.
+
+5. Conclusions
+
+The KNN model was chosen as the final model for this project, as it showed a slightly better balance between precision and recall and had a marginally higher AUC. This model can effectively assist healthcare professionals in identifying high-risk individuals, potentially leading to timely interventions and improved patient outcomes.
+
+6. Future Work
+
+To enhance this project, additional steps could include:
+
+Collecting More Data: A larger dataset would help improve the model’s robustness and generalizability.
+
+Feature Engineering: Further exploration of new features or interactions between features could improve model accuracy.
+
+Alternative Models: Trying other models like Random Forests or Gradient Boosting may yield even higher accuracy.
+
+Deployment: With additional validation, this model could be integrated into healthcare systems for real-time risk prediction.
+
+7. References:-
+
+Kaggle Dataset: Heart Failure Prediction Dataset
+
+Machine Learning Techniques: Various resources on SVM, KNN, and ROC-AUC
+
+
+
+# (I)REFELCTION
+
+1. Key Learnings
+
+This project provided valuable insights into the application of machine learning in healthcare, specifically in predicting heart disease risk. Here are some of the key learnings:
+
+Data Preprocessing: I gained a deeper understanding of the importance of data preprocessing, including handling missing values, outlier removal, and normalization. This step is essential for improving model performance and reliability.
+
+Clustering Analysis: Experimenting with K-means clustering helped me understand how patient data could be grouped based on similar characteristics. This clustering analysis provided a broader view of potential patient subgroups and insights into their health profiles.
+
+Model Selection and Evaluation: Working with SVM and KNN classifiers taught me how different models handle classification tasks and how to interpret various evaluation metrics (e.g., precision, recall, F1 score, and ROC-AUC). This helped in making a well-informed decision on the 
+best model for the dataset.
+
+2. Challenges Faced
+
+Handling Imbalanced Classes: Although the dataset was somewhat balanced, I encountered minor challenges in tuning models to handle any imbalances in class distribution. This required careful attention to evaluation metrics like precision and recall.
+
+Hyperparameter Tuning: Finding the optimal parameters for both SVM and KNN was challenging, as each model’s performance was sensitive to parameters like C in SVM and k in KNN. The grid search and cross-validation processes were computationally expensive but necessary for achieving better accuracy.
+
+Choosing the Right Model: Both SVM and KNN performed well, with KNN showing a slight edge in performance metrics. However, choosing the best model required careful consideration of interpretability, model complexity, and the specific needs of the healthcare application.
+
+3. Areas for Improvement
+
+Exploring Additional Models: Although SVM and KNN were effective, experimenting with additional models like Decision Trees, Random Forests, or Gradient Boosting could provide further improvements in accuracy and interpretability.
+
+Feature Engineering: I could explore creating new features or interactions between existing features to potentially improve the model’s performance. For instance, creating risk categories based on combinations of blood pressure, cholesterol, and age might yield more insightful predictors.
+
+Model Interpretability: In a healthcare context, interpretability is crucial for trust and transparency. Future work could focus on using more interpretable models or tools like SHAP to explain the predictions of complex models like KNN.
+
+4. Overall Reflection
+
+This project reinforced the importance of balancing accuracy with interpretability, especially in sensitive fields like healthcare. It also highlighted the value of iterative testing and optimization when working with machine learning models. I am now more confident in my ability to preprocess data, select and evaluate models, and make data-driven decisions.
+
+Overall, this project has been a valuable experience that strengthened my skills in machine learning, data analysis, and critical thinking. I look forward to applying these insights to more advanced projects and exploring additional ways machine learning can impact healthcare.
